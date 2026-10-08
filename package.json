@@ -1,0 +1,22 @@
+{
+  "name": "@alexdrel/perky",
+  "version": "0.1.0",
+  "description": "An ultra-lightweight TypeScript library for sharing settings and services across components, with simple overrides and module-owned keys.",
+  "keywords": [
+    "typescript",
+    "context",
+    "dependency-injection",
+    "configuration",
+    "settings",
+    "contextual-values"
+  ],
+  "author": "Alex Drel",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/perky.d.ts", "import": "./dist/perky.js" }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": { "access": "public" },
+  "scripts": { "prepack": "deno task test && deno task build" }
+}

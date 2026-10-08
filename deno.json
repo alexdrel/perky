@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "example": "deno run examples/inspect.ts",
+    "test": "deno check perky.ts tests/*.ts examples/*.ts && deno lint && deno fmt --check && deno test",
+    "build": "deno bundle perky.ts --platform browser --format esm --minify --declaration --output dist/perky.js",
+    "pack": "deno task test && deno task build && npm pack --ignore-scripts"
+  },
+  "compilerOptions": { "strict": true },
+  "imports": { "@std/assert": "jsr:@std/assert@^1.0.19" },
+  "fmt": { "indentWidth": 2, "proseWrap": "never", "exclude": ["README.md"] },
+  "exclude": ["dist", "node_modules", "*.tgz"]
+}
