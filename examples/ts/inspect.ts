@@ -1,4 +1,4 @@
-import { Context } from "../perky.ts";
+import { Context } from "../../perky.ts";
 import { Now } from "./environment.ts";
 import { Colors, log, LogLevel } from "./logger.ts";
 

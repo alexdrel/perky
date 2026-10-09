@@ -1,4 +1,4 @@
-import { Context } from "../perky.ts";
+import { Context } from "../../perky.ts";
 
 function typings() {
   const ctx: Context = new Context();

@@ -1,5 +1,5 @@
 import { assertStrictEquals } from "@std/assert";
-import { Context } from "../perky.ts";
+import { Context } from "../../perky.ts";
 
 Deno.test("defaults, distinct identities, aliases, roots and nullish overrides", () => {
   const A = Context.key(1);

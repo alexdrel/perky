@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Perky.csproj" />
+  <Project Path="examples/cs/Perky.Example.csproj" />
+  <Project Path="tests/cs/Perky.Tests.csproj" />
+</Solution>

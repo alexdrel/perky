@@ -1,4 +1,4 @@
-import { Context } from "../perky.ts";
+import { Context } from "../../perky.ts";
 import { Now, WriteLine } from "./environment.ts";
 
 type Level = "debug" | "info" | "warn";

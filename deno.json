@@ -1,12 +1,35 @@
 {
   "tasks": {
-    "example": "deno run examples/inspect.ts",
-    "test": "deno check perky.ts tests/*.ts examples/*.ts && deno lint && deno fmt --check && deno test",
-    "build": "deno bundle perky.ts --platform browser --format esm --minify --declaration --output dist/perky.js",
-    "pack": "deno task test && deno task build && npm pack --ignore-scripts"
+    "example:ts": "deno run examples/ts/inspect.ts",
+    "example:go": "go run ./examples/go",
+    "example:cs": "dotnet run --project examples/cs/Perky.Example.csproj",
+    "example": "deno task example:ts && deno task example:go && deno task example:cs",
+    "test:ts": "deno check && deno lint && deno task fmt:check:ts && deno test",
+    "test:go": "go test -race ./... && go vet ./...",
+    "test:cs": "dotnet test tests/cs/Perky.Tests.csproj --configuration Release",
+    "test": "deno task test:ts && deno task test:go && deno task test:cs",
+    "fmt:ts": "deno fmt",
+    "fmt:go": "gofmt -w perky.go tests/go examples/go",
+    "fmt:cs": "dotnet format Perky.slnx",
+    "fmt": "deno task fmt:ts && deno task fmt:go && deno task fmt:cs",
+    "fmt:check:ts": "deno fmt --check",
+    "fmt:check:go": "deno run --allow-run=gofmt scripts/check-go-format.ts",
+    "fmt:check:cs": "dotnet format Perky.slnx --verify-no-changes",
+    "fmt:check": "deno task fmt:check:ts && deno task fmt:check:go && deno task fmt:check:cs",
+    "build:ts": "deno bundle perky.ts --platform browser --format esm --minify --declaration --output dist/perky.js",
+    "build:go": "go build ./...",
+    "build:cs": "dotnet build Perky.slnx --configuration Release",
+    "build": "deno task build:ts && deno task build:go && deno task build:cs",
+    "pack:ts": "deno task test:ts && deno task build:ts && npm pack --ignore-scripts",
+    "pack:cs": "dotnet pack Perky.csproj --configuration Release --output dist/cs",
+    "pack": "deno task pack:ts"
   },
   "compilerOptions": { "strict": true },
   "imports": { "@std/assert": "jsr:@std/assert@^1.0.19" },
-  "fmt": { "indentWidth": 2, "proseWrap": "never", "exclude": ["README.md"] },
-  "exclude": ["dist", "node_modules", "*.tgz"]
+  "fmt": {
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "proseWrap": "always"
+  },
+  "exclude": ["dist", "node_modules", "*.tgz", "**/bin", "**/obj"]
 }

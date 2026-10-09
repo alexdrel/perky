@@ -1,608 +1,579 @@
 # Perky
 
-Perky is a small TypeScript library for managing contextual values such as settings, modes, policies, and services.
+Perky is a small library for TypeScript, Go, and C# that lets components declare and use typed
+contextual values without coordinating through a shared context definition.
 
-Each module can declare its own context keys without modifying a shared interface or registering them centrally. Functions receive a `Context` argument and use imported keys to access their values. Callers can create derived contexts that override selected values without affecting the original.
+Applications often need to provide settings and services to components deep in their call hierarchy.
+Passing these values individually through intermediate functions creates repetitive plumbing, while
+maintaining a common context or service interface requires unrelated components to coordinate their
+dependencies.
 
-Keys are ordinary TypeScript declarations, so features retain ownership of their settings, and IDE operations such as Find All References and Rename work naturally.
+With Perky, each component declares the contextual values it owns as typed keys. Functions receive
+an explicit context and use those keys to retrieve values. Callers can supply different values by
+deriving new contexts, without changing existing ones or maintaining a central list of dependencies.
 
-Values can be fixed or supplied by getters, allowing a context to expose settings managed and updated elsewhere.
+## Example: Request processing
+
+Consider an HTTP endpoint that generates a report. The diagnostics module uses a request identifier
+for logging and follows the application's current logging level:
+
+```ts
+// diagnostics.ts
+import { Context } from "@alexdrel/perky";
+import { settings } from "./settings";
+
+export const RequestId = Context.key("unknown");
+export const LogLevel = Context.key(() => settings.logLevel);
+
+export function log(ctx: Context, message: string, level: "info" | "debug" = "info") {
+  if (level === "debug" && ctx(LogLevel) !== "debug") return;
+  console.info(`[${ctx(RequestId)}] ${message}`);
+}
+```
+
+Separately, the formatting module uses a locale to format numbers:
+
+```ts
+// formatting.ts
+import { Context } from "@alexdrel/perky";
+
+export const Locale = Context.key("en-US");
+
+export function formatNumber(ctx: Context, value: number) {
+  return value.toLocaleString(ctx(Locale));
+}
+```
+
+Neither module needs to know about the other's settings. The report generator uses both components,
+passing along the context without declaring their dependencies:
+
+```ts
+// reports.ts
+import { Context } from "@alexdrel/perky";
+import { log } from "./diagnostics";
+import { formatNumber } from "./formatting";
+
+export function summarize(ctx: Context, values: number[]) {
+  log(ctx, "Generating report", "debug");
+
+  const total = values.reduce((sum, value) => sum + value, 0);
+  return `Total: ${formatNumber(ctx, total)}`;
+}
+```
+
+The endpoint supplies the values associated with each request:
+
+```ts
+// endpoint.ts
+import { Context } from "@alexdrel/perky";
+import { RequestId } from "./diagnostics";
+import { Locale } from "./formatting";
+import { summarize } from "./reports";
+
+const base = new Context();
+
+export function handle(request: ReportRequest) {
+  const ctx = base(
+    RequestId(request.id),
+    Locale(request.user.locale),
+  );
+
+  return summarize(ctx, request.values);
+}
+```
+
+Each request gets its own context, derived from the same base. Diagnostics and formatting read their
+respective values, while the report generator simply passes the context through. The report's data
+remains an ordinary function argument.
+
+Not every contextual value needs to be fixed when a context is created. The diagnostics module
+defines `LogLevel` using a getter, so logging follows changes to the application's settings without
+rebuilding contexts. A caller can still override that value for a particular context using
+`LogLevel("debug")`.
+
+The keys belong to the modules that use them, rather than to a shared application interface. If
+diagnostics later needs another contextual setting, it can introduce a new key without changing the
+report generator or any intermediate function signatures.
+
+Keys are ordinary exported values, so imports, Find All References, and Rename work as expected.
+Contexts are immutable and passed explicitly, allowing independent requests, jobs, and tests to use
+different values without modifying shared state.
+
+Perky makes contextual values almost as convenient to use as globals, while allowing each request,
+job, or test to have its own values without interfering with others.
+
+## Where Perky helps
+
+Perky can serve as a lightweight alternative to dependency injection frameworks for many
+applications. Components declare keys for the services they consume, while application
+initialization creates and binds the actual implementations. Functions obtain their dependencies
+from context without extensive constructor plumbing, central service interfaces, or registration
+infrastructure.
+
+Testing is an especially natural fit. Individual tests can substitute services, clocks, or settings
+through derived contexts without modifying global state or restoring it afterward. The same
+mechanism supports request and background-job processing, where each execution may need its own
+environment, and independently developed components that need to share services without coordinating
+their declarations.
+
+Contexts can also expose existing configuration through live getters, allowing local overrides
+without changing how the underlying settings are managed.
+
+Perky doesn't prescribe which values belong in a context. Settings and services used across multiple
+components are natural candidates, while values central to an operation, such as the invoice being
+processed or the amount being charged, are generally clearer as explicit parameters. The choice
+remains with the developer.
 
 ## Getting started
 
-Perky exports a single runtime symbol, `Context`, which provides key creation, context construction, and the `Context` type.
+Each implementation follows the same model: a key defines a typed value and its default, while an
+explicitly passed context supplies any overrides. The examples below create a context with an
+initial binding and pass it to a function that reads the key.
+
+### TypeScript
+
+Install from npm:
+
+```sh
+npm install @alexdrel/perky
+```
 
 ```ts
 import { Context } from "@alexdrel/perky";
 
-const Theme = Context.key<"light" | "dark">("light");
-const ShowGrid = Context.key(false);
+const Theme = Context.key("light");
 
-function render(ctx: Context, page: Page) {
-    return renderPage(page, {
-        theme: ctx(Theme),
-        grid: ctx(ShowGrid),
-    });
+function render(ctx: Context) {
+  console.log(ctx(Theme));
 }
 
-const ctx = new Context();
-
-render(ctx, page);
-
-const preview = ctx(
-    Theme("dark"),
-    ShowGrid(true),
-);
-
-render(preview, page);
-
-ctx(Theme);      // "light"
-preview(Theme);  // "dark"
+const ctx = new Context(Theme("dark"));
+render(ctx); // "dark"
 ```
 
-A key identifies a contextual value and defines its type and default. Calling a key with a value or getter creates a binding. Calling a context with a key reads that value; calling it with bindings creates a derived context.
+`Context.key` creates a typed key with a default. Calling a key produces a binding; calling a
+context with a key reads its value. The context constructor accepts initial bindings.
 
-| Expression | Meaning |
-|---|---|
-| `Theme` | Key identity |
-| `Theme("dark")` | Fixed binding |
-| `Theme(() => "dark")` | Getter binding |
-| `ctx(Theme)` | Read |
-| `ctx(Theme("dark"))` | Derive |
+### Go
 
-`new Context(...)` creates an independent context, optionally with initial bindings.
+Add the module to your project:
 
-Neither constructing a binding nor deriving a context changes any existing context.
-
-## Keys and ownership
-
-As a project grows, settings and services tend to accumulate. Passing them individually through unrelated functions becomes tedious, while collecting them into a common `Services` or `ApplicationContext` interface requires different features to coordinate changes to the same definition.
-
-Perky avoids the common definition. A key is declared by the module that owns its meaning.
-
-For example, a rendering module might declare:
-
-```ts
-// rendering/settings.ts
-import { Context } from "@alexdrel/perky";
-
-export const Theme =
-    Context.key<"light" | "dark">("light");
-
-export const ShowGrid = Context.key(false);
+```sh
+go get github.com/alexdrel/perky
 ```
 
-A billing module can independently introduce its own keys:
+```go
+package main
 
-```ts
-// billing/settings.ts
-import { Context } from "@alexdrel/perky";
+import (
+    "fmt"
 
-export const RetryLimit = Context.key(3);
-export const DryRun = Context.key(false);
-```
+    "github.com/alexdrel/perky"
+)
 
-A logging module might expose its logger through a context key:
+var Theme = perky.Key("light")
 
-```ts
-// logging/settings.ts
-import { Context } from "@alexdrel/perky";
+func render(ctx perky.Context) {
+    fmt.Println(Theme.Get(ctx))
+}
 
-export const Logger = Context.key(defaultLogger);
-```
-
-Neither module needs to know about the others when declaring its keys. Adding a new key doesn't require changing a shared interface, updating constructors, or registering it with a central service.
-
-Consumers can import keys from any of these modules. For example, billing can use its own settings alongside the logger owned by the logging module:
-
-```ts
-// billing/charge.ts
-import { Context } from "@alexdrel/perky";
-import { DryRun, RetryLimit } from "./settings";
-import { Logger } from "../logging/settings";
-
-async function charge(ctx: Context, invoice: Invoice) {
-    const logger = ctx(Logger);
-
-    if (ctx(DryRun)) {
-        logger.info("Simulating charge");
-        return simulateCharge(invoice);
-    }
-
-    return chargeWithRetries(invoice, ctx(RetryLimit));
+func main() {
+    ctx := perky.New(Theme.Bind("dark"))
+    render(ctx) // dark
 }
 ```
 
-The logging module doesn't need to know which consumers use its key, and the billing module doesn't need to know how the logger was constructed. Both use the same context without sharing a central declaration of its contents.
+Go uses `Key`, `Bind`, `New`, and `Get` rather than TypeScript's callable syntax. This example uses
+a standalone `perky.Context`; the same keys also work with Go's standard `context.Context`, as
+described later.
 
-Each call to `Context.key` creates a distinct identity. Two modules can declare keys with identical names and types without collisions. Importing or aliasing a key preserves its identity.
+### C#
 
-Because a key is an ordinary exported TypeScript value, the usual IDE operations work on its declaration and references. Find All References can locate reads and explicit bindings without searching for string-based identifiers or consulting a registry.
+The C# implementation targets .NET 10. Download the `.nupkg` from
+[GitHub Releases](https://github.com/alexdrel/perky/releases), or include [Perky.cs](Perky.cs)
+directly in your project.
 
-Keys are not limited to application-wide configuration. They can represent any value that belongs to an execution environment, including temporary modes, request-specific values, and services.
+```csharp
+using System;
+using Perky;
 
-## Contexts
+var Theme = Context.Key("light");
 
-A context is an immutable mapping from keys to value sources.
+var ctx = new Context(Theme.Bind("dark"));
+Render(ctx); // dark
 
-```ts
-const root = new Context();
-
-const normal = root(
-    Theme("light"),
-    RetryLimit(3),
-);
-
-const dark = normal(Theme("dark"));
-const cautious = normal(RetryLimit(1));
-const both = dark(RetryLimit(1));
+void Render(Context context) {
+    Console.WriteLine(context.Get(Theme));
+}
 ```
 
-A derived context inherits its parent's bindings, except where it explicitly overrides them.
+C# uses `Context.Key` to declare keys and `Get` to read them. Shared keys are usually declared as
+`static readonly Key<T>` fields in the classes that own them.
+
+In every language, keys without an override resolve to their defaults. Contexts can be passed
+through application code without declaring a separate interface listing the keys they contain.
+
+## Keys and bindings
+
+A key belongs to the component that declares it. It has a type, a default, and an identity
+independent of its name or value. Other components import or reference that key rather than
+redeclaring it or adding it to a shared context interface.
+
+### TypeScript
 
 ```ts
-normal(Theme);       // "light"
-dark(Theme);         // "dark"
-cautious(Theme);     // "light"
-both(RetryLimit);    // 1
+// diagnostics.ts
+export const RequestId = Context.key("unknown");
+
+// formatting.ts
+export const Locale = Context.key("en-US");
+export const DisplayMode = Context.key<"compact" | "full">("full");
 ```
 
-Derivation doesn't modify the parent or its siblings. If the same key is bound more than once during construction, the last binding takes precedence.
+A call such as `RequestId("req-42")` creates a binding. Its type is checked against the key:
+`DisplayMode("compact")` is valid, while `DisplayMode("verbose")` is a TypeScript error.
 
-An independent context can be created at any time:
+### Go
 
-```ts
-const isolated = new Context(
-    RetryLimit(10),
-);
+```go
+// package diagnostics
+var RequestId = perky.Key("unknown")
+
+// package formatting
+var Locale = perky.Key("en-US")
+var DisplayMode = perky.Key("full")
 ```
 
-It starts from the keys' defaults rather than inheriting bindings from another context.
+`RequestId.Bind("req-42")` creates a typed binding. The factory normally infers the type;
+`perky.KeyRef[T]` is available when a field, parameter, or result needs to name the key's type
+explicitly.
 
-Contexts are ordinary values. They can be stored, passed between functions, returned, or captured by closures. Multiple asynchronous operations can use different contexts without requiring ambient state or special propagation mechanisms.
+### C#
 
-The immutability applies to bindings. It doesn't freeze objects supplied as values or prevent externally owned state from changing.
+```csharp
+public static class Diagnostics
+{
+    public static readonly Key<string> RequestId = Context.Key("unknown");
+}
 
-## Fixed and live values
+public static class Formatting
+{
+    public static readonly Key<string> Locale = Context.Key("en-US");
+}
+```
 
-A key's default is usually a constant:
+Shared keys are commonly `static readonly` fields. A local `var` declaration works just as well when
+the key is private to an operation or test. Bindings use `Diagnostics.RequestId.Bind("req-42")`.
+
+Every key declaration creates a distinct identity, even if two keys have the same type and default.
+Importing or referencing an existing key preserves its identity. No registration step is needed, and
+a context does not have to know which keys may eventually be read from it.
+
+## Contexts and overrides
+
+Contexts are immutable environments of key bindings. A new context starts with its keys' defaults,
+and a derived context inherits its parent's bindings except where explicitly overridden. A context
+can receive several bindings at once; if a key appears more than once, the last binding wins.
+
+The following examples give an application a retry policy and derive a context for an incoming
+request. The request data remains an ordinary argument to the processing function.
+
+### TypeScript
 
 ```ts
 const RetryLimit = Context.key(3);
-```
+const app = new Context(RetryLimit(5));
 
-Some settings change during execution, such as a log level or a user's display preferences. For these, a key can use a getter:
-
-```ts
-// theme.ts
-type ThemeName = "light" | "dark";
-
-let currentTheme: ThemeName = "light";
-
-export const Theme = Context.key<ThemeName>(
-    () => currentTheme
-);
-
-export function setTheme(theme: ThemeName) {
-    currentTheme = theme;
+function handle(request: ReportRequest) {
+  const ctx = app(RequestId(request.id));
+  return processRequest(ctx, request.data);
 }
 ```
 
-The getter is evaluated whenever the key is read:
+### Go
 
-```ts
-const ctx = new Context();
+```go
+var RetryLimit = perky.Key(3)
+var app = perky.New(RetryLimit.Bind(5))
 
-ctx(Theme); // "light"
-
-setTheme("dark");
-
-ctx(Theme); // "dark"
+func handle(request ReportRequest) {
+    ctx := app.With(diagnostics.RequestId.Bind(request.ID))
+    processRequest(ctx, request.Data)
+}
 ```
 
-The type returned by `ctx(Theme)` is still `ThemeName`, not a function or wrapper.
+### C#
 
-This allows the module owning a setting to retain control over its storage and modification. Perky only provides access to the current value. The source might be a local variable, an object property, or an existing configuration system.
+```csharp
+var retryLimit = Context.Key(3);
+var app = new Context(retryLimit.Bind(5));
 
-Bindings follow the same convention:
-
-```ts
-const fixed = ctx(
-    Theme("light"),
-);
-
-const live = ctx(
-    Theme(() => preferences.theme),
-);
+void Handle(ReportRequest request)
+{
+    var ctx = app.With(Diagnostics.RequestId.Bind(request.Id));
+    ProcessRequest(ctx, request.Data);
+}
 ```
 
-`fixed(Theme)` always returns `"light"`. `live(Theme)` evaluates its getter each time.
+Derivation does not modify the application context or any previous request context. The new context
+retains inherited bindings such as the retry policy without copying or restating them. Callers can
+also create an independent root whenever they need one (`new Context()`, `perky.New()`, or
+`new Context()` in C#, respectively).
 
-An explicit binding shadows the inherited source, regardless of whether that source is fixed or live. A derived context can therefore replace a live setting with a fixed value, or vice versa.
+Bindings are immutable, but the objects they refer to need not be. If a key contains a service or a
+mutable object, Perky does not clone or freeze that object. An override changes subsequent key
+reads; it does not retroactively change an object that was previously retrieved and retained.
 
-### Reading live values
+## Fixed and live values
 
-Getters aren't cached by Perky. Two reads of the same key may produce different values if the underlying source changes.
+A key can have a fixed value or a getter that supplies its current value on each read. This is
+useful for settings already managed elsewhere: Perky exposes them through a key without taking over
+their storage. A more local binding can replace a live source with a fixed value, or vice versa.
+Getters are not cached.
 
-When several operations need a consistent value, read it once:
-
-```ts
-const theme = ctx(Theme);
-
-renderHeader(theme);
-renderBody(theme);
-```
-
-Perky doesn't implement subscriptions or reactive updates. A UI framework or state-management library can provide those independently.
-
-### Callable values
-
-Functions passed to `Context.key` or to a key are interpreted as getters. This keeps the common live-setting case concise:
+### TypeScript
 
 ```ts
 const LogLevel = Context.key(() => settings.logLevel);
 
-const local = ctx(
-    LogLevel(() => preferences.logLevel),
-);
+const ctx = new Context(LogLevel("debug")); // Fixed override
+console.log(ctx(LogLevel)); // "debug"
 ```
 
-When the value itself is a function, `false` as the second argument makes that intention explicit:
+A function passed to `Context.key` or to a key is normally a getter. For example,
+`LogLevel(() => preferences.logLevel)` creates a live binding whose getter runs on each read.
+
+### Go
+
+```go
+var LogLevel = perky.LiveKey(func() string { return settings.LogLevel })
+
+ctx := perky.New(LogLevel.Bind("debug")) // Fixed override
+level := LogLevel.Get(ctx)
+```
+
+Go separates fixed and live sources explicitly: `perky.Key` and `Key.Bind` accept fixed values,
+while `perky.LiveKey` and `Key.LiveBind` accept getters. For example,
+`LogLevel.LiveBind(func() string { return preferences.LogLevel })` creates a live override.
+
+### C#
+
+```csharp
+var logLevel = Context.Key(() => Settings.LogLevel);
+
+var ctx = new Context(logLevel.Bind("debug")); // Fixed override
+var level = ctx.Get(logLevel);
+```
+
+`Context.Key(Func<T>)` and `Key<T>.Bind(Func<T>)` create live sources. For example,
+`logLevel.Bind(() => Preferences.LogLevel)` supplies a live override. Getters run on reads, not when
+the binding is constructed.
+
+### When the value is a function
+
+TypeScript and C# need to distinguish a function stored _as a value_ from a function called _to
+obtain a value_. Go's `Key`/`LiveKey` distinction already makes this explicit.
+
+**TypeScript** uses `false` for a fixed callable:
 
 ```ts
 const Handler = Context.key(defaultHandler, false);
+const ctx = new Context(Handler(customHandler, false));
 
-const specialized = ctx(
-    Handler(customHandler, false),
-);
-
-specialized(Handler)("Hello");
+ctx(Handler)("Hello");
 ```
 
-A getter returning a function uses the ordinary form:
+**Go** stores functions directly with `Key` and `Bind`:
 
-```ts
-const Handler = Context.key(() => currentHandler);
+```go
+var Handler = perky.Key(defaultHandler)
+ctx := perky.New(Handler.Bind(customHandler))
+
+Handler.Get(ctx)("Hello")
 ```
 
-Here `ctx(Handler)` returns the current handler without invoking it.
+**C#** uses the declared delegate type to resolve the overload:
 
-The rules are the same when declaring defaults and constructing bindings:
+```csharp
+var handler = Context.Key<Action<string>>(Console.WriteLine);
+var ctx = new Context(handler.Bind((Action<string>)CustomHandler));
 
-| Form | Meaning |
-|---|---|
-| `Context.key(value)` | Fixed default |
-| `Context.key(() => value)` | Getter default |
-| `Context.key(fn, false)` | Callable fixed default |
-| `Key(value)` | Fixed binding |
-| `Key(() => value)` | Getter binding |
-| `Key(fn, false)` | Callable fixed binding |
-
-Passing `false` as the second argument is also available for non-callable values, though it normally isn't needed.
-
-## Type safety and defaults
-
-Each key carries its value type.
-
-```ts
-const RetryLimit = Context.key(3);
-
-ctx(RetryLimit);       // number
-RetryLimit(5);         // valid
-RetryLimit("five");    // TypeScript error
+ctx.Get(handler)("Hello");
 ```
 
-A getter must also return a compatible value.
+For a C# function with no arguments, specify its delegate type to store it as a value:
 
-Every key has a default. Reading a key that has no binding in the current context or any of its ancestors returns that default.
-
-When absence is meaningful, it can be part of the key's type:
-
-```ts
-const Database = Context.key<Database | null>(null);
+```csharp
+var now = Context.Key(() => DateTimeOffset.UtcNow); // Key<DateTimeOffset>, live
+var clock = Context.Key<Func<DateTimeOffset>>(() => DateTimeOffset.UtcNow); // Fixed function
 ```
 
-A function that requires a database can check for its presence:
+A getter returning a function is also supported. In TypeScript, omit `false` and return the function
+from the getter; in Go, use `LiveKey` or `LiveBind`; in C#, use a getter returning the delegate
+type. Explicit null values are valid bindings and are distinct from missing keys. In C#, use a named
+`value: null` argument or a typed cast where a null could otherwise be confused with a null getter.
+
+## Passing contexts
+
+Perky uses explicit context arguments. A function can read its own keys or pass the context on to
+another component without declaring all the keys that component needs. This remains ordinary
+function calling, including when callbacks or asynchronous operations are involved.
+
+### TypeScript
 
 ```ts
-async function findUser(ctx: Context, id: string) {
-    const db = ctx(Database);
+async function processBatch(ctx: Context, jobs: Job[]) {
+  await Promise.all(jobs.map((job) => processJob(ctx, job)));
+}
+```
 
-    if (!db) {
-        throw new Error("Database unavailable");
+### Go
+
+```go
+func processBatch(ctx perky.Context, jobs []Job) {
+    for _, job := range jobs {
+        processJob(ctx, job)
     }
-
-    return db.findUser(id);
 }
 ```
 
-Perky doesn't track which keys have been explicitly bound in the type of a context. All contexts share the same `Context` type.
+### C#
 
-This is intentional. The purpose of independent keys is to allow new contextual values to be introduced without modifying the types of existing functions or contexts.
-
-The type system checks values against their keys, but it doesn't prove that every service required by an operation has been configured.
-
-## Passing context
-
-Perky doesn't maintain a global current context. Functions that use or propagate contextual values receive a context explicitly.
-
-```ts
-function handleRequest(ctx: Context, request: Request) {
-    return processOrder(ctx, request.order);
+```csharp
+Task ProcessBatch(Context ctx, IEnumerable<Job> jobs)
+{
+    return Task.WhenAll(jobs.Select(job => ProcessJob(ctx, job)));
 }
 ```
 
-A function doesn't have to declare which individual keys it uses. Adding a key to an implementation therefore doesn't change its signature or the signatures of intermediate functions.
+No global current-context pointer, thread-local storage, or automatic async propagation is involved.
+A function receives the environment its caller chose. This is also why a function's signature need
+not change when one of its downstream components introduces another key.
 
-Callbacks capture contexts through ordinary JavaScript closures:
+## Go context integration
 
-```ts
-function processBatch(ctx: Context, orders: Order[]) {
-    return Promise.all(
-        orders.map(order => processOrder(ctx, order))
-    );
+Go's Perky keys can also be read from the standard `context.Context`, which already travels through
+many HTTP and library APIs. `perky.Attach` adds Perky bindings to a native context without changing
+its cancellation, deadlines, or unrelated values:
+
+```go
+func handle(req *http.Request) {
+    native := perky.Attach(
+        req.Context(),
+        diagnostics.RequestId.Bind(req.Header.Get("X-Request-ID")),
+    )
+    processRequest(native)
+
+    appCtx := perky.Detach(native)
+    render(appCtx)
+}
+
+func processRequest(ctx context.Context) {
+    log.Printf("Processing %s", diagnostics.RequestId.Get(ctx))
+    // Cancellation and deadlines are also available through ctx.
+}
+
+func render(ctx perky.Context) {
+    fmt.Println(diagnostics.RequestId.Get(ctx))
+    // No cancellation or deadline API is available on ctx.
 }
 ```
 
-The callback retains the particular context it captured, even if it runs later.
+`Key.Get` works with either context type. `perky.Detach` extracts the Perky bindings without copying
+them, evaluating getters, or retaining the native Go context. The resulting `perky.Context` can be
+extended with `With`, but deliberately does **not** implement `context.Context`: it has no
+cancellation or deadline API. A standalone context can also be constructed directly using
+`perky.New`.
 
-No asynchronous context tracking, thread-local storage, or special callback handling is involved.
-
-### What belongs in context?
-
-Context is useful for values determined by the surrounding environment rather than by an individual operation.
-
-For example:
-
-```ts
-processOrder(ctx, order);
-```
-
-The order is an explicit input. The context may supply the logger, retry policy, database, or other settings used while processing it.
-
-A contextual value can be as small as a boolean mode or as substantial as a service instance. Perky doesn't impose a distinction between configuration and dependencies.
-
-Ordinary parameters remain appropriate when a value is central to the operation itself.
+Application code decides whether to keep the native Go context or work with the standalone Perky
+context. The two types do not need to be passed together.
 
 ## Testing
 
-Contexts are convenient for testing because a test can override only the values relevant to it.
+Derived contexts make it possible to replace just the values relevant to a test, leaving application
+settings and other tests untouched. A clock is a simple example: production reads the real clock
+through a getter, while a test binds a fixed instant.
 
-For a complete small example, run [the document inspector](examples/inspect.ts). It passes a context from the caller through batch inspection and individual document inspection to [the console logger](examples/logger.ts). The logger owns its level and color settings, while [the application environment](examples/environment.ts) owns the clock and output. It prints normal, debug, and warnings-only logging, then the unchanged parent context's behavior and all three log colors. A final run uses the real clock.
+### TypeScript
+
+```ts
+const Now = Context.key(() => Date.now());
+
+const testCtx = app(Now(1_700_000_000_000));
+const result = generateReport(testCtx, sampleData);
+```
+
+### Go
+
+```go
+var Now = perky.LiveKey(time.Now)
+
+fixed := time.Unix(1_700_000_000, 0)
+testCtx := app.With(Now.Bind(fixed))
+result := generateReport(testCtx, sampleData)
+```
+
+### C#
+
+```csharp
+var now = Context.Key(() => DateTimeOffset.UtcNow);
+
+var fixedTime = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
+var testCtx = app.With(now.Bind(fixedTime));
+var result = GenerateReport(testCtx, sampleData);
+```
+
+A test can similarly replace a logger, database, or other service by binding its key to a fake
+implementation. No global overrides need to be installed or restored. Mutable service instances and
+getter state remain the application's responsibility, including their behavior under concurrent
+access.
+
+## Examples and development
+
+The implementations are small and dependency-free. See the source and tests for the exact runtime
+details, including key identity and how inherited bindings are stored.
+
+### TypeScript
+
+Use Deno 2.9 or later for the repository's development commands:
 
 ```sh
-deno task example
+deno task test:ts   # Type checking, linting, formatting, and runtime tests
+deno task build:ts  # Build JavaScript and TypeScript declarations in dist/
+deno task pack:ts   # Validate and create an npm package tarball
 ```
 
-The [logger tests](examples/logger_test.ts) replace `Date.now` and console output through their own contexts, then derive quieter or colored contexts without changing the originals.
+The [document inspector](examples/ts/inspect.ts) and [logger tests](tests/ts/logger_test.ts) show a
+larger example with different contextual environments. The package is published as
+[`@alexdrel/perky`](https://www.npmjs.com/package/@alexdrel/perky).
+
+### Go
 
 ```sh
-deno test examples/logger_test.ts
+go test -race ./...
 ```
 
-```ts
-const testCtx = new Context(
-    Database(fakeDatabase),
-    DryRun(true),
-    RetryLimit(0),
-);
+The [usage test](tests/go/example_test.go) provides an executable example. The `KeyRef[T]` name is
+available for APIs that pass keys around as typed values; the generic alias requires Go 1.24 or
+later.
 
-await processOrder(testCtx, sampleOrder);
-```
-
-A test can also derive its environment from an existing context:
-
-```ts
-const testCtx = baseCtx(
-    Database(fakeDatabase),
-);
-```
-
-Neither operation changes `baseCtx` or any other context.
-
-There are no global overrides to restore after the test. Mutable service instances remain subject to their own state and lifetime rules, as they would with ordinary dependency injection.
-
-## Relationship to dependency injection
-
-Perky can distribute services without requiring them to be passed individually or stored in a centrally defined service interface.
-
-```ts
-const Database = Context.key<Database | null>(null);
-const Logger = Context.key(defaultLogger);
-
-const ctx = new Context(
-    Database(database),
-    Logger(logger),
-);
-```
-
-Functions retrieve whichever services they use through the context argument.
-
-Unlike a dependency injection container, Perky doesn't create service instances, resolve constructor dependencies, manage scopes of object lifetime, or rebuild object graphs.
-
-Service construction remains ordinary application code. Perky handles only the bindings through which those services are accessed.
-
-This also means overriding a database binding doesn't reconstruct an existing repository object that was created using a different database. It changes subsequent reads of that key, not objects that previously captured its value.
-
-Perky is equally usable for settings that have nothing to do with services. Its abstraction is the contextual value, not the dependency graph.
-
-## Scope
-
-Perky deliberately leaves several responsibilities to other parts of an application.
-
-It doesn't provide configuration persistence, remote settings management, subscriptions, or state mutation. Getter-backed keys can expose values from systems that provide those capabilities.
-
-It doesn't construct or dispose of resources. Context lifetime and resource lifetime are independent.
-
-It doesn't automatically propagate context through function calls. The context argument is explicit.
-
-There is no global key registry, central configuration type, or requirement to declare a function's individual contextual dependencies.
-
-The library is concerned with key identity, typed values, inheritance, and overrides.
-
----
-
-## Implementation notes
-
-The implementation is small and dependency-free. This section records its runtime and typing behavior.
-
-### Development and packaging
-
-Use Deno 2.9 or later:
+### C#
 
 ```sh
-deno task test   # Type checks, lint, formatting, and runtime tests
-deno task build  # JavaScript and TypeScript declarations in dist/
-deno task pack   # Validate, build, and create an npm tarball
+dotnet test tests/cs/Perky.Tests.csproj
+dotnet run --project examples/cs/Perky.Example.csproj
+dotnet build Perky.csproj --configuration Release
+deno task pack:cs # Create dist/cs/Perky.<version>.nupkg for a GitHub release
 ```
 
-The npm package exports an ES module and declarations. It has no runtime dependencies. `npm pack` also runs validation and the build through its `prepack` hook. Package name, version, and metadata live in `package.json`; publication is a separate release step. No JSR publishing configuration is included.
+The [C# example](examples/cs/Program.cs) demonstrates context-based logging and clock substitution.
+The implementation is in [Perky.cs](Perky.cs).
 
-For local Deno use, import `Context` from `./perky.ts`.
-
-### Public API
-
-Export one runtime symbol, `Context`, which is both constructible and usable as a TypeScript type.
-
-```ts
-import { Context } from "@alexdrel/perky";
-
-const Mode = Context.key("normal");
-
-const ctx: Context = new Context(
-    Mode("debug"),
-);
-
-ctx(Mode);              // string
-ctx(Mode("normal"));    // Context
-```
-
-The public runtime API consists of:
-
-- `Context.key(source)` and `Context.key(value, false)` for creating keys.
-- `new Context(...bindings)` for constructing independent contexts.
-- `Key(source)` and `Key(value, false)` for constructing bindings.
-- `ctx(Key)` for reading.
-- `ctx(binding, ...bindings)` for deriving contexts.
-
-A context read accepts exactly one key. Derivation requires at least one binding. Construction accepts zero or more bindings.
-
-`Context.key` is a static callable property containing the key factory, with an optional `false` argument.
-
-Internal helper functions and types need not be exported.
-
-### Key representation
-
-Every key receives a unique symbol when declared. Its identity is independent of its name or value type. Internally, the KVS tuple representation is extended to `[symbol, getterOrNull, value?]`. The callable key wraps its default tuple; bindings use the same tuple shape. Getter bindings omit the value; fixed bindings use a null getter.
-
-A key is a callable object that creates bindings and carries a default source. Its runtime identity and default source are not writable through the public API.
-
-Both defaults and overrides use the same internal representation:
-
-```ts
-type Binding<T> = readonly [symbol, (() => T) | null, value?: T];
-```
-
-A binding carries the key identity, a getter or null, and an optional fixed value.
-
-Bindings are readonly tuples. Constructing a binding doesn't invoke a getter or modify an existing context.
-
-At runtime, a callable argument is interpreted as a getter. Passing `false` as the second argument bypasses this interpretation and stores its argument directly.
-
-The getter's result type, rather than its function type, is the key's value type.
-
-### Frame representation
-
-Use sparse prototype-linked frames.
-
-A root frame is created with:
-
-```ts
-Object.create(null)
-```
-
-A derived frame is created with:
-
-```ts
-Object.create(parentFrame)
-```
-
-Each frame stores only its explicit overrides, indexed by the keys' unique symbols. An inherited binding is found through normal prototype lookup.
-
-When no binding exists in the frame chain, resolution uses the key's default source.
-
-The lookup must distinguish a missing binding from one containing `null` or `undefined`. Both are valid stored values.
-
-Bindings supplied together are installed in order, with later bindings replacing earlier ones for the same key.
-
-Private frames are fully constructed before use and aren't mutated afterward. The public context functions and keys are frozen once created; binding tuples remain plain arrays.
-
-Getter sources are evaluated on each read. Fixed sources return their stored values unchanged.
-
-No registry, key enumeration, default copying, or global current-context pointer is required.
-
-### Callable Context
-
-A context instance is a function closing over its private frame.
-
-TypeScript should expose call signatures equivalent to:
-
-```ts
-interface Context {
-    <T>(key: Key<T>): T;
-    (binding: Binding, ...rest: Binding[]): Context;
-}
-```
-
-A class/interface declaration merge can give the constructible `Context` export callable instance types. The constructor can return a function created by an internal factory.
-
-The implementation must preserve the intended TypeScript call and construction signatures under strict mode.
-
-Since instances are callable functions rather than ordinary class instances, normal class prototype identity and `instanceof Context` behavior shouldn't be assumed unless explicitly implemented.
-
-### TypeScript inference
-
-The typings need to distinguish source functions from stored callable values.
-
-Expected examples:
-
-```ts
-const Count = Context.key(0);
-// Key<number>
-
-const Theme = Context.key(() => getTheme());
-// Key<ThemeName>
-
-const Handler = Context.key(defaultHandler, false);
-// Key<typeof defaultHandler>
-
-const local = ctx(Theme(() => currentTheme));
-// Context
-
-const handler = local(Handler);
-// typeof defaultHandler
-```
-
-For function-valued keys, direct callable arguments must follow getter semantics. Fixed callable values require `false` as the second argument.
-
-TypeScript overloads and inference should agree with the runtime interpretation rather than merely accepting both forms.
-
-Internal `Key` and `Binding` types may be used in the public declarations without requiring users to import or name them.
-
-### Tests
-
-Runtime tests should cover independent key identities, aliases, defaults, fixed and getter bindings, inheritance, nested overrides, duplicate bindings, explicit nullish values, and independent roots.
-
-Include tests for functions stored with a `false` second argument and getters that return functions.
-
-Test closure capture and asynchronous execution with different explicitly passed contexts. Verify that deriving a context never modifies its parent or siblings.
-
-Compile-time tests should cover inferred key types, explicit generic types, invalid bindings, callable-value cases, and the merged callable/constructible `Context` type.
-
-Implementation should use ordinary JavaScript functions, symbols, and prototype-linked objects. Proxies, decorators, reflection, global state, and external dependencies aren't needed.
-
----
+The combined `deno task test`, `deno task build`, and `deno task fmt` commands run across all three
+languages.
 
 ## Background
 
-Perky grew out of the typed-context design in [KVS](https://github.com/alexdrel/KVS), an experimental TypeScript dialect, but is intended to stand independently as an ordinary TypeScript library.
+Perky grew out of the typed-context design in [KVS](https://github.com/alexdrel/KVS), an
+experimental TypeScript dialect, but is a standalone library with implementations in three
+languages.

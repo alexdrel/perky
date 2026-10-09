@@ -21,6 +21,19 @@ jobs:
         with:
           deno-version: "2.9.5"
       - name: Check and test
-        run: deno task test
+        run: deno task test:ts
       - name: Build npm package
-        run: deno task build
+        run: deno task build:ts
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+          cache: false
+      - name: Check and test Go
+        run: deno task test:go
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Check C# formatting
+        run: dotnet format Perky.slnx --verify-no-changes
+      - name: Test C#
+        run: deno task test:cs

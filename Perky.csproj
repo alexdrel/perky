@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Authors>Alex Drel</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Description>Typed contextual values with independently owned keys and immutable overrides.</Description>
+    <RepositoryUrl>https://github.com/alexdrel/perky</RepositoryUrl>
+    <Version>0.1.1</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Perky.cs" />
+  </ItemGroup>
+</Project>

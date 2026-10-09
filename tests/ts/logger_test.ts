@@ -1,7 +1,7 @@
 import { assertEquals } from "@std/assert";
-import { Context } from "../perky.ts";
-import { Now, WriteLine } from "./environment.ts";
-import { Colors, log, LogLevel } from "./logger.ts";
+import { Context } from "../../perky.ts";
+import { Now, WriteLine } from "../../examples/ts/environment.ts";
+import { Colors, log, LogLevel } from "../../examples/ts/logger.ts";
 
 Deno.test("a logger test supplies its own clock and output", () => {
   const lines: string[] = [];
