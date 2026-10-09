@@ -1,6 +1,6 @@
 {
   "name": "@alexdrel/perky",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "An ultra-lightweight TypeScript library for sharing settings and services across components, with simple overrides and module-owned keys.",
   "keywords": [
     "typescript",
@@ -10,19 +10,58 @@
     "settings",
     "contextual-values"
   ],
-  "author": "Alex Drel",
-  "license": "MIT",
+  "homepage": "https://github.com/alexdrel/perky#readme",
+  "bugs": {
+    "url": "https://github.com/alexdrel/perky/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/alexdrel/perky.git"
   },
-  "homepage": "https://github.com/alexdrel/perky#readme",
-  "bugs": { "url": "https://github.com/alexdrel/perky/issues" },
+  "license": "MIT",
+  "author": "Alex Drel",
   "type": "module",
   "exports": {
-    ".": { "types": "./dist/perky.d.ts", "import": "./dist/perky.js" }
+    ".": {
+      "types": "./dist/perky.d.ts",
+      "import": "./dist/perky.js"
+    }
   },
-  "files": ["dist/perky.js", "dist/perky.d.ts", "README.md", "LICENSE"],
-  "publishConfig": { "access": "public" },
-  "scripts": { "prepack": "deno task test:ts && deno task build:ts" }
+  "files": [
+    "dist/perky.js",
+    "dist/perky.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "example:ts": "node examples/ts/inspect.ts",
+    "example:go": "go run ./examples/go",
+    "example:cs": "dotnet run --project examples/cs/Perky.Example.csproj",
+    "example": "npm run example:ts && npm run example:go && npm run example:cs",
+    "test:ts": "node --test tests/ts/context_test.ts tests/ts/logger_test.ts",
+    "test:go": "go test -race . ./tests/go/... ./examples/go/...",
+    "test:cs": "dotnet test tests/cs/Perky.Tests.csproj --configuration Release",
+    "test": "npm run fmt:check && npm run build && npm run test:ts && npm run test:go && npm run test:cs",
+    "fmt": "dprint fmt",
+    "fmt:check": "dprint check",
+    "build:ts": "tsc && tsc --project tsconfig.build.json",
+    "build:go": "go vet . ./tests/go/... ./examples/go/... && go build . ./examples/go/...",
+    "build:cs": "dotnet build Perky.slnx --configuration Release -warnaserror -p:RunAnalyzers=true",
+    "build": "npm run build:ts && npm run build:go && npm run build:cs",
+    "pack:ts": "npm pack",
+    "pack:cs": "dotnet pack Perky.csproj --configuration Release --output dist/cs",
+    "pack": "npm run pack:ts",
+    "prepack": "npm run build:ts && npm run test:ts"
+  },
+  "devDependencies": {
+    "@dprint/json": "^0.25.2",
+    "@dprint/markdown": "^0.26.0",
+    "@dprint/typescript": "^0.96.1",
+    "@types/node": "^24.19.1",
+    "dprint": "^0.61.1",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

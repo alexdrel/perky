@@ -1,5 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
-
 // Fixed values use a null getter; live values omit the value slot.
 type Binding<T = unknown> = readonly [
   id: symbol,
@@ -8,8 +6,7 @@ type Binding<T = unknown> = readonly [
 ];
 
 // A function-valued key takes a getter returning that function, unless false is supplied.
-type Input<T> = T extends (...args: any[]) => unknown ? () => T
-  : T | (() => T);
+type Input<T> = T extends (...args: any[]) => unknown ? () => T : T | (() => T);
 
 interface Key<T> {
   (source: Input<T>, isGetter?: undefined): Binding<T>;

@@ -1,7 +1,8 @@
-import { assertStrictEquals } from "@std/assert";
+import { strictEqual as assertStrictEquals } from "node:assert";
+import { test } from "node:test";
 import { Context } from "../../perky.ts";
 
-Deno.test("defaults, distinct identities, aliases, roots and nullish overrides", () => {
+test("defaults, distinct identities, aliases, roots and nullish overrides", () => {
   const A = Context.key(1);
   const B = Context.key(1);
   const alias = A;
@@ -14,7 +15,7 @@ Deno.test("defaults, distinct identities, aliases, roots and nullish overrides",
   assertStrictEquals(root(Nullable(undefined))(Nullable), undefined);
 });
 
-Deno.test("nested inheritance, siblings and last binding wins", () => {
+test("nested inheritance, siblings and last binding wins", () => {
   const A = Context.key(0);
   const B = Context.key(false);
   const root = new Context(A(1), A(2));
@@ -29,7 +30,7 @@ Deno.test("nested inheritance, siblings and last binding wins", () => {
   assertStrictEquals(child(A), 4);
 });
 
-Deno.test("live sources are lazy, uncached and shadowable", () => {
+test("live sources are lazy, uncached and shadowable", () => {
   let reads = 0;
   const Count = Context.key(() => ++reads);
   const root = new Context();
@@ -43,7 +44,7 @@ Deno.test("live sources are lazy, uncached and shadowable", () => {
   assertStrictEquals(root(Count(7))(Count(() => 8))(Count), 8);
 });
 
-Deno.test("callable values and getter-returned functions", () => {
+test("callable values and getter-returned functions", () => {
   const original = (text: string) => text.length;
   const replacement = (text: string) => text.length + 1;
   const Handler = Context.key(original, false);
@@ -65,7 +66,7 @@ Deno.test("callable values and getter-returned functions", () => {
   assertStrictEquals(ctx(Value).count, 2);
 });
 
-Deno.test("asynchronous closures retain their explicit context", async () => {
+test("asynchronous closures retain their explicit context", async () => {
   const Mode = Context.key("normal");
   const root = new Context();
   async function read(ctx: Context) {
@@ -81,7 +82,7 @@ Deno.test("asynchronous closures retain their explicit context", async () => {
   assertStrictEquals(root(Mode), "normal");
 });
 
-Deno.test("public contexts and keys are frozen; bindings are plain tuples", () => {
+test("public contexts and keys are frozen; bindings are plain tuples", () => {
   const Count = Context.key(0);
   const ctx = new Context();
   assertStrictEquals(Object.isFrozen(ctx), true);

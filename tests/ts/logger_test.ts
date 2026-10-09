@@ -1,9 +1,10 @@
-import { assertEquals } from "@std/assert";
+import { deepStrictEqual as assertEquals } from "node:assert";
+import { test } from "node:test";
 import { Context } from "../../perky.ts";
 import { Now, WriteLine } from "../../examples/ts/environment.ts";
 import { Colors, log, LogLevel } from "../../examples/ts/logger.ts";
 
-Deno.test("a logger test supplies its own clock and output", () => {
+test("a logger test supplies its own clock and output", () => {
   const lines: string[] = [];
   const ctx = new Context(
     Now(() => 1_000, false),
@@ -21,7 +22,7 @@ Deno.test("a logger test supplies its own clock and output", () => {
   ]);
 });
 
-Deno.test("a quieter context inherits the clock and output, leaving its parent intact", () => {
+test("a quieter context inherits the clock and output, leaving its parent intact", () => {
   const lines: string[] = [];
   const ctx = new Context(
     Now(() => 1_000, false),
@@ -40,7 +41,7 @@ Deno.test("a quieter context inherits the clock and output, leaving its parent i
   ]);
 });
 
-Deno.test("colors can be enabled for one call's context", () => {
+test("colors can be enabled for one call's context", () => {
   const lines: string[] = [];
   const ctx = new Context(
     Now(() => 1_000, false),

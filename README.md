@@ -535,12 +535,13 @@ details, including key identity and how inherited bindings are stored.
 
 ### TypeScript
 
-Use Deno 2.9 or later for the repository's development commands:
+Use Node.js 24 or later for the repository's development commands. Install development dependencies
+with `npm ci`:
 
 ```sh
-deno task test:ts   # Type checking, linting, formatting, and runtime tests
-deno task build:ts  # Build JavaScript and TypeScript declarations in dist/
-deno task pack:ts   # Validate and create an npm package tarball
+npm run test:ts   # Runtime tests
+npm run build:ts  # Type check all TS and build JS/declarations in dist/
+npm run pack:ts   # Validate and create an npm package tarball
 ```
 
 The [document inspector](examples/ts/inspect.ts) and [logger tests](tests/ts/logger_test.ts) show a
@@ -550,7 +551,7 @@ larger example with different contextual environments. The package is published 
 ### Go
 
 ```sh
-go test -race ./...
+npm run test:go
 ```
 
 The [usage test](tests/go/example_test.go) provides an executable example. The `KeyRef[T]` name is
@@ -563,14 +564,15 @@ later.
 dotnet test tests/cs/Perky.Tests.csproj
 dotnet run --project examples/cs/Perky.Example.csproj
 dotnet build Perky.csproj --configuration Release
-deno task pack:cs # Create dist/cs/Perky.<version>.nupkg for a GitHub release
+npm run pack:cs # Create dist/cs/Perky.<version>.nupkg for a GitHub release
 ```
 
 The [C# example](examples/cs/Program.cs) demonstrates context-based logging and clock substitution.
 The implementation is in [Perky.cs](Perky.cs).
 
-The combined `deno task test`, `deno task build`, and `deno task fmt` commands run across all three
-languages.
+The combined `npm test`, `npm run build`, and `npm run fmt` commands run across all three languages.
+Builds include TypeScript checking, Go vet, and .NET compiler and SDK analyzers. `npm test` checks
+formatting and builds before running tests.
 
 ## Background
 

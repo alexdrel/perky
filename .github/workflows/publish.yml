@@ -1,0 +1,50 @@
+name: Publish release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Check release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const { version } = JSON.parse(readFileSync("package.json", "utf8"));
+            const csVersion = readFileSync("Perky.csproj", "utf8").match(/<Version>(.*?)<\/Version>/)?.[1];
+            if (csVersion !== version) {
+              throw new Error("npm and C# package versions must match");
+            }
+            if (process.env.RELEASE_TAG !== `v${version}`) {
+              throw new Error(`Release tag must be v${version}`);
+            }
+          '
+      - run: npm install --global npm@11
+      - run: npm ci
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: "10.0.x"
+      - name: Build C# package
+        run: npm run pack:cs
+      - name: Attach C# package to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" dist/cs/*.nupkg --repo "$GITHUB_REPOSITORY" --clobber
+      - run: npm publish

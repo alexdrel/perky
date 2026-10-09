@@ -17,23 +17,17 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v5
-      - uses: denoland/setup-deno@v2
+      - uses: actions/setup-node@v4
         with:
-          deno-version: "2.9.5"
-      - name: Check and test
-        run: deno task test:ts
-      - name: Build npm package
-        run: deno task build:ts
+          node-version: "24"
+          cache: npm
       - uses: actions/setup-go@v7
         with:
           go-version: "1.27.x"
           cache: false
-      - name: Check and test Go
-        run: deno task test:go
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
-      - name: Check C# formatting
-        run: dotnet format Perky.slnx --verify-no-changes
-      - name: Test C#
-        run: deno task test:cs
+      - run: npm ci
+      - name: Check and test all languages
+        run: npm test

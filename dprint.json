@@ -1,0 +1,44 @@
+{
+  "lineWidth": 100,
+  "indentWidth": 2,
+  "typescript": {
+    "deno": true
+  },
+  "markdown": {
+    "textWrap": "always",
+    "codeBlock.skipFormat": true,
+    "wrapCodeSpans": false
+  },
+  "excludes": [
+    "dist/**",
+    "node_modules/**",
+    "coverage/**",
+    "**/bin/**",
+    "**/obj/**",
+    "package-lock.json"
+  ],
+  "plugins": [
+    "./node_modules/@dprint/typescript/plugin.wasm",
+    "./node_modules/@dprint/json/plugin.wasm",
+    "./node_modules/@dprint/markdown/plugin.wasm",
+    "npm:@dprint/exec@0.7.3/plugin.json@704701df449dd7e942a71144773778ac529d68c2e4657bfc236d393b898b9a67",
+    "npm:@dprint/roslyn@0.22.0/plugin.json@ff539da3693d6827fb8a9482241f71588318ad3d7d750a507547a738abf15402"
+  ],
+  "exec": {
+    "cwd": "${configDir}",
+    "commands": [
+      {
+        "command": "gofmt",
+        "exts": [
+          "go"
+        ],
+        "cacheKeyFiles": [
+          "go.mod"
+        ]
+      }
+    ]
+  },
+  "roslyn": {
+    "indentWidth": 4
+  }
+}
